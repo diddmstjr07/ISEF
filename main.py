@@ -8,11 +8,13 @@ import scipy.io as sio
 from scipy import signal
 from pathlib import Path
 import matplotlib.pyplot as plt
+import cv2
 
 import os
 import base64
 import getpass
 import subprocess
+from tqdm import tqdm
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -161,23 +163,21 @@ class DatasetProcessor:
 
     def unzip_files(self):
         zip_files = list(self.base_dir.rglob("*.zip"))
-        print(f"\n{len(zip_files)}, unzipping..")
+        print(f"\nFound {len(zip_files)} zip files. Starting unzip process...")
 
-        for zip_path in zip_files:
+        for zip_path in tqdm(zip_files, desc="Unzipping", unit="file"):
             extract_to = zip_path.with_suffix('') 
             
             if extract_to.exists():
-                print(f"  [Skip] Existing: {extract_to.name}")
                 continue
                 
-            print(f"  [Unzip] {zip_path.name} -> {extract_to.name}")
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(extract_to)
             except zipfile.BadZipFile:
-                print(f"  Damaged: {zip_path}")
+                tqdm.write(f"  Damaged: {zip_path.name}")
 
-    def static_directory(self):
+    def mat_static_directory(self):
         mat_files = list(self.base_dir.rglob("*.mat"))
         
         if not mat_files:
@@ -185,8 +185,17 @@ class DatasetProcessor:
         
         for path in mat_files:
             yield path
+    
+    def avi_static_directory(self):
+        avi_files = list(self.base_dir.rglob("*.avi"))
 
-def list_subject_files(base_dir: Path) -> None:
+        if not avi_files:
+            return
+        
+        for path in avi_files:
+            yield path
+
+def list_subject_files(base_dir: Path, video_frame_count: int | None = 60) -> None:
     def save_stacked_channels_png(emg_tensor: np.ndarray, out_png: Path):
         specs = [emg_tensor[0, ch] for ch in range(emg_tensor.shape[1])]  # list of (T,F)
         stacked = np.concatenate(specs, axis=0)  # (C*T, F)
@@ -197,6 +206,49 @@ def list_subject_files(base_dir: Path) -> None:
         out_png.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(out_png, bbox_inches="tight", pad_inches=0, dpi=200)
         plt.close()
+
+    def center_crop(img: np.ndarray, crop_size: tuple[int, int]) -> np.ndarray:
+        crop_w, crop_h = crop_size
+        h, w = img.shape[:2]
+        left = max((w - crop_w) // 2, 0)
+        top = max((h - crop_h) // 2, 0)
+        return img[top : top + crop_h, left : left + crop_w]
+
+    def convert_avi_to_mp4(
+        avi_path: Path,
+        out_path: Path,
+        crop_size=(320, 240),
+        resize=(88, 88),
+    ) -> None:
+        cap = cv2.VideoCapture(str(avi_path))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if not fps or fps <= 0:
+            fps = 30
+
+        writer = None
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                if crop_size:
+                    frame = center_crop(frame, crop_size)
+                if resize:
+                    frame = cv2.resize(frame, resize)
+                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+
+                if writer is None:
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    h, w = frame.shape[:2]
+                    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                    writer = cv2.VideoWriter(str(out_path), fourcc, fps, (w, h))
+
+                writer.write(frame)
+        finally:
+            cap.release()
+            if writer is not None:
+                writer.release()
     
     out_root = base_dir.parent / f"{base_dir.name}"
     emgpreprocessing = EMGPreprocessing()
@@ -204,7 +256,7 @@ def list_subject_files(base_dir: Path) -> None:
     processor = DatasetProcessor(base_dir=base_dir)
     processor.unzip_files()
 
-    for directory in processor.static_directory():
+    for directory in processor.mat_static_directory():
         relative_path = directory.relative_to(base_dir)
         relative_path = [
             "EMG_IMG" if part == "EMG" else part 
@@ -213,9 +265,19 @@ def list_subject_files(base_dir: Path) -> None:
         relative_path = Path(*relative_path)
         target_png_path = out_root / relative_path.with_suffix(".png")
         save_stacked_channels_png(emg_tensor=emgpreprocessing.load_and_preprocess_emg(mat_path=directory), out_png=target_png_path)
+    
+    for directory in processor.avi_static_directory():
+        relative_path = directory.relative_to(base_dir)
+        relative_path = [
+            "Visual_MP4" if part == "Visual" else part
+            for part in relative_path.parts
+        ]
+        relative_path = Path(*relative_path)
+        target_mp4 = out_root / relative_path.with_suffix(".mp4")
+        convert_avi_to_mp4(directory, target_mp4)
 
 if __name__ == "__main__":
     GithubDownload.download()
     huggingfacedownload = HuggingFaceDownload()
     huggingfacedownload.dowload_full_dataset(local_dir="Resource/data")
-    list_subject_files(Path("Resource/data"))
+    list_subject_files(Path("Resource/data"), video_frame_count=15)
