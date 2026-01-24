@@ -37,6 +37,7 @@ class HuggingFaceDownload:
         if password is None:
             password = getpass.getpass("password: ")
         self.token = self.decrypt_file(file_path=enc_path, password=password)
+        print(self.token)
         self.repo = "MML-Group/AVE-Speech"
 
     def derive_key(self, password: str, salt: bytes) -> bytes:
@@ -256,7 +257,9 @@ def list_subject_files(base_dir: Path, video_frame_count: int | None = 60) -> No
     processor = DatasetProcessor(base_dir=base_dir)
     processor.unzip_files()
 
-    for directory in processor.mat_static_directory():
+    # Process EMG files
+    mat_files = list(processor.mat_static_directory())
+    for directory in tqdm(mat_files, desc="Converting EMG to Spectrogram", unit="file"):
         relative_path = directory.relative_to(base_dir)
         relative_path = [
             "EMG_IMG" if part == "EMG" else part 
@@ -264,9 +267,16 @@ def list_subject_files(base_dir: Path, video_frame_count: int | None = 60) -> No
         ]
         relative_path = Path(*relative_path)
         target_png_path = out_root / relative_path.with_suffix(".png")
+        
+        # Skip if already converted
+        if target_png_path.exists():
+            continue
+        
         save_stacked_channels_png(emg_tensor=emgpreprocessing.load_and_preprocess_emg(mat_path=directory), out_png=target_png_path)
     
-    for directory in processor.avi_static_directory():
+    # Process AVI files
+    avi_files = list(processor.avi_static_directory())
+    for directory in tqdm(avi_files, desc="Converting AVI to MP4", unit="file"):
         relative_path = directory.relative_to(base_dir)
         relative_path = [
             "Visual_MP4" if part == "Visual" else part
@@ -274,10 +284,15 @@ def list_subject_files(base_dir: Path, video_frame_count: int | None = 60) -> No
         ]
         relative_path = Path(*relative_path)
         target_mp4 = out_root / relative_path.with_suffix(".mp4")
+        
+        # Skip if already converted
+        if target_mp4.exists():
+            continue
+        
         convert_avi_to_mp4(directory, target_mp4)
 
 if __name__ == "__main__":
     GithubDownload.download()
     huggingfacedownload = HuggingFaceDownload()
     huggingfacedownload.dowload_full_dataset(local_dir="Resource/data")
-    list_subject_files(Path("Resource/data"), video_frame_count=15)
+    # list_subject_files(Path("Resource/data"), video_frame_count=15)

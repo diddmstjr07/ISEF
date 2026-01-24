@@ -187,7 +187,7 @@ def parse_args():
     parser.add_argument("--dataloader-num-workers", type=int, default=4)
     parser.add_argument("--report-to", default="tensorboard")
 
-    parser.add_argument("--fps", type=float, default=1.0)
+    parser.add_argument("--fps", type=float, default=1)
     parser.add_argument("--nframes", type=int, default=None)
 
     parser.add_argument("--image-min-pixels", type=int, default=None)

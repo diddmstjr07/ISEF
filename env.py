@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--prompt",
         type=str,
-        default="<image>\\n<video>\\n말한 문장을 출력해줘.",
+        default="<image>\\n<video>\\nTranscribe the spoken sentence.",
     )
     parser.add_argument("--preprocess", action="store_true")
     parser.add_argument("--video-frame-count", type=int, default=60)

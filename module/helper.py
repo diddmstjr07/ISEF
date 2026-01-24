@@ -66,8 +66,8 @@ def build_train_json(
         items.append(
             {
                 "id": f"{subject}_{session}_{label}",
-                "image": [str(spec_path.relative_to(base_dir))],
-                "video": [str(vid_path.relative_to(base_dir))],
+                "image": [str(spec_path.resolve())],
+                "video": [str(vid_path.resolve())],
                 "conversations": [
                     {"from": "human", "value": prompt},
                     {"from": "gpt", "value": sentence},
@@ -94,7 +94,7 @@ def create_train_json(
     preprocess: bool = False,
     video_frame_count: int | None = 60,
 ) -> Path | list[Path]:
-    split_names = ("Train", "Valid", "Test")
+    split_names = ("Train", "Val", "Test")
     split_dirs = {name: base_dir / name for name in split_names}
 
     if any(path.is_dir() for path in split_dirs.values()):

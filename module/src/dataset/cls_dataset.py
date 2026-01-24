@@ -7,8 +7,8 @@ import ujson as json
 from torch.utils.data import Dataset
 from qwen_vl_utils import process_vision_info
 
-from src.params import DataArguments
-from src.constants import (
+from module.src.params import DataArguments
+from module.src.constants import (
     SYSTEM_MESSAGE,
 )
 

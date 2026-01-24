@@ -1,1 +1,4 @@
 venv/
+Resource/
+output/
+*__pycache__/
