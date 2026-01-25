@@ -294,16 +294,16 @@ def list_subject_files(base_dir: Path, video_frame_count: int | None = 60) -> No
         convert_avi_to_mp4(directory, target_mp4)
 
 if __name__ == "__main__":
-    # GithubDownload.download()
-    # huggingfacedownload = HuggingFaceDownload()
-    # huggingfacedownload.dowload_full_dataset(local_dir="Resource/data")
-    # list_subject_files(Path("Resource/data"), video_frame_count=15)
-    try:
-        ok = main()
-        sys.exit(0 if ok else 1)
-    except KeyboardInterrupt:
-        print("\n\nInterrupted by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\nError: {e}")
-        sys.exit(1)
+    GithubDownload.download()
+    huggingfacedownload = HuggingFaceDownload()
+    huggingfacedownload.dowload_full_dataset(local_dir="Resource/data")
+    list_subject_files(Path("Resource/data"), video_frame_count=15)
+    # try:
+    #     ok = main()
+    #     sys.exit(0 if ok else 1)
+    # except KeyboardInterrupt:
+    #     print("\n\nInterrupted by user")
+    #     sys.exit(1)
+    # except Exception as e:
+    #     print(f"\nError: {e}")
+    #     sys.exit(1)
