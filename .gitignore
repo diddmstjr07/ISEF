@@ -2,3 +2,5 @@ venv/
 Resource/data/
 output/
 *__pycache__/
+pretrained/
+.cache/
