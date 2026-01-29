@@ -199,6 +199,13 @@ def parse_args():
     parser.add_argument("--video-resized-width", type=int, default=None)
     parser.add_argument("--video-resized-height", type=int, default=None)
 
+    parser.add_argument("--lora-enable", action="store_true", default=False)
+    parser.add_argument("--lora-rank", type=int, default=16)
+    parser.add_argument("--lora-alpha", type=int, default=32)
+    parser.add_argument("--lora-dropout", type=float, default=0.05)
+
+    parser.add_argument("--freeze-merger", action="store_true", default=False)
+
     parser.add_argument("--use-liger-kernel", action="store_true", default=False)
     parser.add_argument("--bf16", action="store_true", default=True)
     parser.add_argument("--fp16", action="store_true", default=False)

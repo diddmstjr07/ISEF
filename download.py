@@ -1,13 +1,97 @@
-import cv2
+from huggingface_hub import snapshot_download
+
+import sys
 import time
 import zipfile
 import librosa
 import numpy as np
-from tqdm import tqdm
 import scipy.io as sio
 from scipy import signal
 from pathlib import Path
 import matplotlib.pyplot as plt
+
+import os
+import cv2
+import base64
+import getpass
+import subprocess
+from tqdm import tqdm
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+from module.drive import main
+
+class GithubDownload:
+    @staticmethod
+    def download(output_path: str="Resource/data"):
+        os.makedirs(output_path, exist_ok=True)
+        command = [
+            'curl',
+            '-L',
+            '-o',
+            f'{output_path}/corpus.json',
+            'https://raw.githubusercontent.com/MML-Group/code4AVE-Speech/master/corpus.json'
+        ]
+        return subprocess.run(command)
+
+class HuggingFaceDownload:
+    def __init__(self, password: str | None = None, enc_path: str = "Resource/oJtYpLhVfD.enc"):
+        if password is None:
+            password = getpass.getpass("password: ")
+        self.token = self.decrypt_file(file_path=enc_path, password=password)
+        print(self.token)
+        self.repo = "MML-Group/AVE-Speech"
+
+    def derive_key(self, password: str, salt: bytes) -> bytes:
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    
+    def decrypt_file(self, file_path: str, password: str):
+        with open(file_path, 'rb') as file:
+            data = file.read()
+
+        salt = data[:16]
+        encrypted_data = data[16:]
+        key = self.derive_key(password, salt)
+        f = Fernet(key)
+        decrypted_data = f.decrypt(encrypted_data)
+        return decrypted_data.decode('utf-8')
+    
+    def download_part_dataset(
+        self,
+        subjects: tuple[int, ...] = (1,),
+        modalities: tuple[str, ...] = ("EMG",),
+        split: str = "Train",
+        local_dir: str | Path = ".",
+    ):
+        allow_patterns = []
+        for subject in subjects:
+            for modality in modalities:
+                allow_patterns.append(f"{split}/{modality}/subject_{subject}.zip")
+        return snapshot_download(
+            repo_id=self.repo,
+            repo_type="dataset",
+            local_dir=str(local_dir),
+            allow_patterns=allow_patterns,
+            token=self.token,
+        )
+
+    def dowload_full_dataset(
+        self,
+        local_dir: str | Path = ".",
+    ):
+        return snapshot_download(
+            repo_id=self.repo,
+            repo_type="dataset",
+            local_dir=str(local_dir),
+            token=self.token,
+        )
 
 class EMGPreprocessing:
     def __init__(self):
@@ -76,7 +160,7 @@ class EMGPreprocessing:
             )
         )
         return emg
-
+    
 class DatasetProcessor:
     def __init__(self, base_dir: str | Path):
         self.base_dir = Path(base_dir)
@@ -86,11 +170,11 @@ class DatasetProcessor:
         print(f"\nFound {len(zip_files)} zip files. Starting unzip process...")
 
         for zip_path in tqdm(zip_files, desc="Unzipping", unit="file"):
-            extract_to = zip_path.with_suffix('')
-
+            extract_to = zip_path.with_suffix('') 
+            
             if extract_to.exists():
                 continue
-
+                
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(extract_to)
@@ -99,19 +183,19 @@ class DatasetProcessor:
 
     def mat_static_directory(self):
         mat_files = list(self.base_dir.rglob("*.mat"))
-
+        
         if not mat_files:
             return
-
+        
         for path in mat_files:
             yield path
-
+    
     def avi_static_directory(self):
         avi_files = list(self.base_dir.rglob("*.avi"))
 
         if not avi_files:
             return
-
+        
         for path in avi_files:
             yield path
 
@@ -119,7 +203,7 @@ def list_subject_files(base_dir: Path, video_frame_count: int | None = 60) -> No
     def save_stacked_channels_png(emg_tensor: np.ndarray, out_png: Path):
         specs = [emg_tensor[0, ch] for ch in range(emg_tensor.shape[1])]  # list of (T,F)
         stacked = np.concatenate(specs, axis=0)  # (C*T, F)
-
+        
         plt.figure()
         plt.imshow(stacked, aspect="auto", origin="lower")
         plt.axis("off")
@@ -169,7 +253,7 @@ def list_subject_files(base_dir: Path, video_frame_count: int | None = 60) -> No
             cap.release()
             if writer is not None:
                 writer.release()
-
+    
     out_root = base_dir.parent / f"{base_dir.name}"
     emgpreprocessing = EMGPreprocessing()
 
@@ -181,18 +265,18 @@ def list_subject_files(base_dir: Path, video_frame_count: int | None = 60) -> No
     for directory in tqdm(mat_files, desc="Converting EMG to Spectrogram", unit="file"):
         relative_path = directory.relative_to(base_dir)
         relative_path = [
-            "EMG_IMG" if part == "EMG" else part
+            "EMG_IMG" if part == "EMG" else part 
             for part in relative_path.parts
         ]
         relative_path = Path(*relative_path)
         target_png_path = out_root / relative_path.with_suffix(".png")
-
+        
         # Skip if already converted
         if target_png_path.exists():
             continue
-
+        
         save_stacked_channels_png(emg_tensor=emgpreprocessing.load_and_preprocess_emg(mat_path=directory), out_png=target_png_path)
-
+    
     # Process AVI files
     avi_files = list(processor.avi_static_directory())
     for directory in tqdm(avi_files, desc="Converting AVI to MP4", unit="file"):
@@ -203,9 +287,24 @@ def list_subject_files(base_dir: Path, video_frame_count: int | None = 60) -> No
         ]
         relative_path = Path(*relative_path)
         target_mp4 = out_root / relative_path.with_suffix(".mp4")
-
+        
         # Skip if already converted
         if target_mp4.exists():
             continue
-
+        
         convert_avi_to_mp4(directory, target_mp4)
+
+if __name__ == "__main__":
+    GithubDownload.download()
+    huggingfacedownload = HuggingFaceDownload()
+    huggingfacedownload.dowload_full_dataset(local_dir="Resource/data")
+    list_subject_files(Path("Resource/data"), video_frame_count=15)
+    # try:
+    #     ok = main()
+    #     sys.exit(0 if ok else 1)
+    # except KeyboardInterrupt:
+    #     print("\n\nInterrupted by user")
+    #     sys.exit(1)
+    # except Exception as e:
+    #     print(f"\nError: {e}")
+    #     sys.exit(1)

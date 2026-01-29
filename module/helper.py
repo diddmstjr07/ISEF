@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from ..network.download import list_subject_files
+from main import list_subject_files
 
 def build_train_json(
     base_dir: Path,
